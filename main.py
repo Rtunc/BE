@@ -1,10 +1,7 @@
 import math
 from fastapi import FastAPI
-from cassandra.cluster import Cluster
-from database import get_cassandra_connection
 from typing import List
 from pydantic import BaseModel
-from cassandra.query import SimpleStatement
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_postgres_connection

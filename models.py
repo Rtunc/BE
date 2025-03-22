@@ -31,3 +31,17 @@ class AirQuality(BaseModel):
     pm10: float
     vn_aqi: float
     timestamp: datetime
+
+
+class AirQualityFULL(BaseModel):
+    province_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    co: float
+    no2: float
+    o3: float
+    so2: float
+    pm25: float
+    pm10: float
+    vn_aqi: float
+    timestamp: datetime

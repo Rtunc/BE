@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_postgres_connection
 from models import SensorData, AQIRealtime, place, time, AirQuality
+from models import AirQualityFULL
 
 from datetime import datetime, timedelta
 # Initialize start time when server starts
@@ -78,7 +79,7 @@ def get_place_with_current_aqi() -> List[AirQuality]:
 
 
 @app.get('/get_hourly_data')
-def get_hourly_data(q: str) -> List[AirQuality]:
+def get_hourly_data(q: str) -> List[AirQualityFULL]:
     conn = get_postgres_connection()
     
     simulated_datetime = get_simulated_time()
@@ -87,7 +88,7 @@ def get_hourly_data(q: str) -> List[AirQuality]:
     SELECT DATE_TRUNC('hour', timestamp) AS hour, 
        AVG(vn_aqi) AS avg_aqi, 
        COUNT(*) AS record_count,
-       AVG(longitude) AS longitude,
+       AVG(longitude) AS x,
        AVG(latitude) AS latitude,
        CASE WHEN AVG(co)::text IN ('NaN', 'Infinity', '-Infinity') THEN 0 ELSE AVG(co) END AS co,
        CASE WHEN AVG(no2)::text IN ('NaN', 'Infinity', '-Infinity') THEN 0 ELSE AVG(no2) END AS no2,
@@ -121,14 +122,19 @@ ORDER BY hour DESC"""
             else:
                 processed_row.append(value) # Giữ nguyên giá trị
         processed_results.append(processed_row)
+        
     # In kết quả đã xử lý để debug
     
-    return [AirQuality(
+    return [AirQualityFULL(
         province_name=q,
-        latitude=row[2],
+        latitude=row[4],
         longitude=row[3],
-        pm25=row[4],
-        pm10=row[5],
+        pm25=row[9],
+        co=row[5],
+        no2=row[6],
+        o3=row[7],
+        so2=row[10],
+        pm10=row[9],
         vn_aqi=row[1],
         timestamp=row[0]
     ) for row in processed_results]

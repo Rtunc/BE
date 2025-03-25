@@ -10,16 +10,23 @@ from models import AirQualityFULL
 
 from datetime import datetime, timedelta
 # Initialize start time when server starts
+
+# start_time = datetime(2025, 11, 3, 11, 0, 0)
 start_time = datetime(2025, 11, 3, 11, 0, 0)
 server_start_time = datetime.now()
 
-def get_simulated_time():
+# Cấu hình sử dụng thời gian thực hay thời gian mô phỏng
+USE_REAL_TIME = True
+
+def get_current_time():
     """
-    Returns simulated time starting from 2025-11-03 14:00:00+00
-    and incrementing in real-time since server start
+    Returns either real time or simulated time based on configuration
     """
-    elapsed = datetime.now() - server_start_time
-    return start_time + elapsed
+    if USE_REAL_TIME:
+        return datetime.now()
+    else:
+        elapsed = datetime.now() - server_start_time
+        return start_time + elapsed
 
 
 
@@ -62,17 +69,19 @@ def get_place() -> List[place]:
 
 @app.get("/get_simulated_time")
 def get_simulated_time_endpoint() -> time:
-        simulated_datetime = get_simulated_time()
-        return time(time=simulated_datetime)
+    current_time = get_current_time()
+    return time(time=current_time)
     
 
 @app.get("/get_place_with_current_aqi")
 def get_place_with_current_aqi() -> List[AirQuality]:
     conn = get_postgres_connection()
-    simulated_datetime = get_simulated_time()
+    
+    current_time = get_current_time()
+        
     query = "SELECT DISTINCT ON (province_name) province_name, latitude, longitude, pm25, pm10, vn_aqi, timestamp FROM air_quality WHERE timestamp < %s ORDER BY province_name, timestamp DESC;"
     with conn.cursor() as cursor:
-        cursor.execute(query, (simulated_datetime,))
+        cursor.execute(query, (current_time,))
         results = cursor.fetchall()
     conn.close()
     return [AirQuality(province_name=row[0], latitude=row[1], longitude=row[2], pm25=row[3], pm10=row[4], vn_aqi=row[5], timestamp=row[6]) for row in results]
@@ -82,7 +91,7 @@ def get_place_with_current_aqi() -> List[AirQuality]:
 def get_hourly_data(q: str) -> List[AirQualityFULL]:
     conn = get_postgres_connection()
     
-    simulated_datetime = get_simulated_time()
+    current_time = get_current_time()
     
     query = """
     SELECT DATE_TRUNC('hour', timestamp) AS hour, 
@@ -98,14 +107,13 @@ def get_hourly_data(q: str) -> List[AirQualityFULL]:
        CASE WHEN AVG(so2)::text IN ('NaN', 'Infinity', '-Infinity') THEN 0 ELSE AVG(so2) END AS so2
 FROM air_quality
 WHERE province_name = %s
-  AND timestamp BETWEEN (TIMESTAMP '2025-03-11 12:00:00' - INTERVAL '24 hours') 
-                    AND TIMESTAMP '2025-03-11 12:00:00'
+  AND timestamp BETWEEN (%s - INTERVAL '24 hours') AND %s
 GROUP BY hour
 ORDER BY hour DESC"""
     
     # Thực thi truy vấn SQL với tham số q (tên tỉnh/thành phố)
     with conn.cursor() as cursor:
-        cursor.execute(query, (q, ))
+        cursor.execute(query, (q, current_time, current_time))
         results = cursor.fetchall()
     conn.close()
 
@@ -123,8 +131,6 @@ ORDER BY hour DESC"""
                 processed_row.append(value) # Giữ nguyên giá trị
         processed_results.append(processed_row)
         
-    # In kết quả đã xử lý để debug
-    
     return [AirQualityFULL(
         province_name=q,
         latitude=row[4],
@@ -134,8 +140,7 @@ ORDER BY hour DESC"""
         no2=row[6],
         o3=row[7],
         so2=row[10],
-        pm10=row[9],
+        pm10=row[8],
         vn_aqi=row[1],
         timestamp=row[0]
     ) for row in processed_results]
-

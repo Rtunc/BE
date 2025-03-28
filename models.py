@@ -45,3 +45,20 @@ class AirQualityFULL(BaseModel):
     pm10: float
     vn_aqi: float
     timestamp: datetime
+
+class Forecasted_AirQuality(BaseModel):
+    province_name: Optional[str] = None
+    aqi: float
+    timestamp: datetime
+    
+class Predict_Model(BaseModel):
+    model: str
+    model_path: str
+    mae: Optional[float] = None
+    rmse: Optional[float] = None
+    r2: Optional[float] = None
+    mape: Optional[float] = None
+    test_loss: Optional[float] = None
+    is_active: bool
+    trained_time: datetime
+    

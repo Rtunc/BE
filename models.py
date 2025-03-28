@@ -61,4 +61,3 @@ class Predict_Model(BaseModel):
     test_loss: Optional[float] = None
     is_active: bool
     trained_time: datetime
-    

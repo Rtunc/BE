@@ -6,12 +6,20 @@ from datetime import datetime, timedelta, timezone
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_postgres_connection
 from models import SensorData, AQIRealtime, place, time, AirQuality, AirQualityFULL, Forecasted_AirQuality, Predict_Model
+from requests.auth import HTTPBasicAuth
 import jwt
 import json
+import requests
+
 
 # Initialize start time when server starts
 start_time = datetime(2025, 11, 3, 11, 0, 0)
 server_start_time = datetime.now() - timedelta(hours=7)
+
+
+AIRFLOW_HOST = "http://100.92.66.89:8081/"  # Đổi thành địa chỉ Airflow của bạn
+USERNAME = "airflow"
+PASSWORD = "airflow"
 
 
 # Cấu hình sử dụng thời gian thực hay thời gian mô phỏng
@@ -189,8 +197,6 @@ ORDER BY hour DESC"""
         vn_aqi=row[1],
         timestamp=row[0]
     ) for row in processed_results]
-
-
 @app.get("/api/forecast-aqi")
 async def get_forecast_aqi(province: str):
     """
@@ -211,13 +217,11 @@ async def get_forecast_aqi(province: str):
         # SQL query to get forecast data
         query = """
         SELECT 
-            timestamp,
-            aqi,
-            province_name
+            DISTINCT ON (timestamp) timestamp, aqi, province_name, inserted_time
         FROM forecast_aqi
         WHERE province_name = %s
         AND timestamp >= %s
-        ORDER BY timestamp
+        ORDER BY timestamp, inserted_time DESC
         """
         
         with conn.cursor() as cursor:
@@ -232,26 +236,30 @@ async def get_forecast_aqi(province: str):
         forecast_data = []
         for row in results:
             # Handle NaN or Inf values
-            processed_values = []
-            for value in row:
-                if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-                    processed_values.append(None)
-                else:
-                    processed_values.append(value)
+            timestamp = row[0]
+            aqi = row[1]
+            province_name = row[2]
+            
+            # Check for NaN or Inf in numeric values
+            if isinstance(aqi, float) and (math.isnan(aqi) or math.isinf(aqi)):
+                aqi = None
             
             forecast_data.append({
-                "timestamp": processed_values[0],
-                "aqi": processed_values[1],
-                "province_name": processed_values[2],
+                "timestamp": timestamp,
+                "aqi": aqi,
+                "province_name": province_name,
             })
         
+        # Fix: Use dictionary keys instead of indices when creating Forecasted_AirQuality objects
         return [Forecasted_AirQuality(
-            province_name=row[2],
-            aqi=row[1],
-            timestamp=row[0]
-    ) for row in forecast_data]
+            province_name=item["province_name"],
+            aqi=item["aqi"],
+            timestamp=item["timestamp"]
+        ) for item in forecast_data]
     
     except Exception as e:
+        # Log the actual error for debugging
+        print(f"Forecast API error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error retrieving forecast data: {str(e)}")
 
 
@@ -351,3 +359,19 @@ async def activate_model(model_path:str):
         if 'conn' in locals() and conn:
             conn.close()
         raise HTTPException(status_code=500, detail=f"Error activating model: {str(e)}")
+
+
+
+# Forecast_7_days_dag
+
+@app.post("/trigger-forecast-7-days-dag/")
+async def trigger_dag():
+    url = f"{AIRFLOW_HOST}/api/v1/dags/Forecast_7_days_dag/dagRuns"
+
+    response = requests.post(
+        url,
+        auth=HTTPBasicAuth(USERNAME, PASSWORD),
+        json={"conf": {}, "note": "Triggered via FastAPI"},
+    )
+
+    return response.json()
